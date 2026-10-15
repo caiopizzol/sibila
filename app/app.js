@@ -16,53 +16,50 @@ document.body.insertAdjacentHTML("afterbegin", `
   </div>
 </div>
 
-<div class="wrap">
-  <div class="top">
-    <div class="brand"><img data-src="img/brasil.webp" alt="Bandeira do Brasil" width="44" height="31"><span><b>2º turno</b> – Acompanhamento e Projeção</span></div>
-    <div class="live" id="live" role="status"><i></i><span id="updated">Carregando…</span></div>
-  </div>
+<header class="top">
+  <div class="brand"><img data-src="img/brasil.webp" alt="Bandeira do Brasil" width="44" height="31"><span><b>2º turno</b> – Acompanhamento e Projeção</span></div>
+  <div class="live" id="live" role="status"><i></i><span id="updated">Carregando…</span></div>
+</header>
 
+<div class="wrap">
   <section class="waitcard" id="waitcard" hidden>
-    <h1>Aguardando o 2º turno</h1>
-    <p id="wait-sub"></p>
+    <div class="wait-text"><h1>Aguardando o 2º turno</h1><p id="wait-sub"></p></div>
     <div class="countdown" id="countdown" role="timer" aria-live="off"></div>
   </section>
 
   <div class="demo-intro" id="demo-intro" hidden>
-    <h2>Enquanto isso: a projeção no 1º turno de 2026</h2>
-    <p>Reprodução da apuração de 04/10/2026 (confronto Lula × Flávio), na ordem real em que as seções chegaram. Arraste o controle para avançar a apuração e veja a projeção chegar ao resultado antes da contagem.</p>
+    <div><h2>Enquanto isso: a projeção no 1º turno de 2026</h2>
+    <p>Reprodução da apuração de 04/10/2026 (confronto Lula × Flávio), na ordem real em que as seções chegaram. Arraste o controle e veja a projeção chegar ao resultado antes da contagem.</p></div>
     <div id="demo-slot"></div>
   </div>
 
-  <section class="hero" id="hero" aria-live="polite">
-    <div class="verdict"><h1 id="headline">Carregando a apuração</h1><p id="subline"></p></div>
-    <div class="duel" id="duel"></div>
-    <div class="tug" id="tug"></div>
-    <div class="progress" id="prog"></div>
-  </section>
+  <div class="dash">
+    <section class="hero col-hero" id="hero" aria-live="polite">
+      <h2 class="label">Projeção</h2>
+      <div class="verdict"><h1 id="headline">Carregando a apuração</h1><p id="subline"></p></div>
+      <div class="duel" id="duel"></div>
+      <div class="tug" id="tug"></div>
+      <div class="progress" id="prog"></div>
+    </section>
 
-  <section class="block">
-    <h2>A noite até agora</h2>
-    <p>As linhas contínuas são a apuração oficial. As tracejadas levam ao resultado final projetado, e a faixa mostra o intervalo de confiança de <span id="conf-l">95%</span>.</p>
-    <div class="panel">
-      <div class="legend" id="legend"></div>
-      <div class="chart" id="chart"></div>
-    </div>
-  </section>
-
-  <section class="block">
-    <h2>Estados</h2>
-    <p>Resultado apurado e projetado em cada estado. Clique no nome de uma coluna para ordenar.</p>
-    <div class="states-grid">
-      <div class="tablewrap"><table class="ufs" id="ufs"></table></div>
+    <section class="panel col-map">
+      <h2 class="label">Estados</h2>
       <figure class="map" id="map">
         <div class="map-svg" id="map-svg"></div>
         <figcaption class="map-legend" id="map-legend"></figcaption>
       </figure>
-    </div>
-  </section>
+      <p class="hint">Resultado apurado e projetado em cada estado. Clique no nome de uma coluna para ordenar.</p>
+      <div class="tablewrap"><table class="ufs" id="ufs"></table></div>
+    </section>
 
-  <p class="note" id="note"></p>
+    <section class="panel col-chart">
+      <h2 class="label">A noite até agora</h2>
+      <p class="hint">As linhas contínuas são a apuração oficial. As tracejadas levam ao resultado final projetado, e a faixa mostra o intervalo de confiança de <span id="conf-l">95%</span>.</p>
+      <div class="legend" id="legend"></div>
+      <div class="chart" id="chart"></div>
+      <p class="note" id="note"></p>
+    </section>
+  </div>
 
   <footer class="credit">
     <img data-src="img/carlos-schwabe.jpg" alt="Carlos Schwabe" width="48" height="60">
@@ -247,6 +244,9 @@ function setTseIndicator(status) {
   $("updated").textContent = status.tse.ok ? "TSE respondendo" : `TSE sem resposta${since}`;
 }
 if (!DEV) { loadLive(); setInterval(loadLive, LIVE_REFRESH); }
+// O gráfico é desenhado na largura da coluna: redesenha quando o layout muda de tamanho
+let resizeTimer = null;
+addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => view && render(), 150); });
 
 /* ---------- Renderização ---------- */
 function render() {
@@ -429,7 +429,7 @@ function renderChart(snap, curve) {
     }
     s += `<path d="${pts.map(([x, y], i) => `${i ? "L" : "M"}${fmt(x)},${fmt(y)}`).join("")}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round"/>`;
     s += `<circle cx="${x0}" cy="${y0}" r="4.5" fill="${col}" stroke="var(--paper)" stroke-width="2"/>`;
-    labels.push({ y: yP, name: c.name, val: `${pct(v.share)} projetado` });
+    labels.push({ y: yP, name: w < 600 ? c.name.split(" ")[0] : c.name, val: `${pct(v.share)} projetado` });
   }
   s += `</g>`;
   // rótulos finais, afastados se colidirem
