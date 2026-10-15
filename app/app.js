@@ -1,8 +1,10 @@
 import { DEFAULT_PROJ, callStatus } from "./engine.js";
+import { BR_MAP } from "./br-map.js";
 
-// Página ao vivo (/) lê o histórico gravado pelo coletor (server/poller.mjs) em live/.
-// A demonstração (/demo) reproduz o 2º turno de 2022 na ordem real de apuração, com um
-// controle que define o ponto da apuração.
+// Página ao vivo (/) lê o histórico gravado pelo coletor (server/poller.mjs) em live/. Antes de
+// a apuração começar, mostra a contagem regressiva e, abaixo dela, a demonstração.
+// A demonstração (/demo e na espera) reproduz o confronto Lula x Flávio no 1º turno de 2026 na
+// ordem real de apuração, com um controle que define o ponto da apuração.
 const DEV = document.documentElement.dataset.mode === "demo";
 const asset = (p) => new URL(p, import.meta.url).href; // caminhos relativos a este arquivo
 document.body.insertAdjacentHTML("afterbegin", `
@@ -20,9 +22,20 @@ document.body.insertAdjacentHTML("afterbegin", `
     <div class="live" id="live" role="status"><i></i><span id="updated">Carregando…</span></div>
   </div>
 
+  <section class="waitcard" id="waitcard" hidden>
+    <h1>Aguardando o 2º turno</h1>
+    <p id="wait-sub"></p>
+    <div class="countdown" id="countdown" role="timer" aria-live="off"></div>
+  </section>
+
+  <div class="demo-intro" id="demo-intro" hidden>
+    <h2>Enquanto isso: a projeção no 1º turno de 2026</h2>
+    <p>Reprodução da apuração de 04/10/2026 (confronto Lula × Flávio), na ordem real em que as seções chegaram. Arraste o controle para avançar a apuração e veja a projeção chegar ao resultado antes da contagem.</p>
+    <div id="demo-slot"></div>
+  </div>
+
   <section class="hero" id="hero" aria-live="polite">
     <div class="verdict"><h1 id="headline">Carregando a apuração</h1><p id="subline"></p></div>
-    <div class="countdown" id="countdown" role="timer" aria-live="off" hidden></div>
     <div class="duel" id="duel"></div>
     <div class="tug" id="tug"></div>
     <div class="progress" id="prog"></div>
@@ -40,7 +53,13 @@ document.body.insertAdjacentHTML("afterbegin", `
   <section class="block">
     <h2>Estados</h2>
     <p>Resultado apurado e projetado em cada estado. Clique no nome de uma coluna para ordenar.</p>
-    <div class="tablewrap"><table class="ufs" id="ufs"></table></div>
+    <div class="states-grid">
+      <div class="tablewrap"><table class="ufs" id="ufs"></table></div>
+      <figure class="map" id="map">
+        <div class="map-svg" id="map-svg"></div>
+        <figcaption class="map-legend" id="map-legend"></figcaption>
+      </figure>
+    </div>
   </section>
 
   <p class="note" id="note"></p>
@@ -66,12 +85,13 @@ const CANDIDATES = DEV ? {
 };
 const CERTAINTY = 0.999;
 const PROJ = { ...DEFAULT_PROJ };
-const ELECTION = DEV ? "04/10/2026" : "25/10/2026";
+const LIVE_DAY = "25/10/2026", DEMO_DAY = "04/10/2026";
 // A demonstração reproduz o confronto Lula x Flávio no 1º turno de 2026 (data-demo/), em que
 // ninguém se elege: os textos falam em terminar à frente
-const COPY = DEV
+let demoOn = false;
+const copy = () => (demoOn
   ? { likely: " deve terminar à frente", decided: " termina à frente", chance: "de chance de terminar à frente", call: "apontar quem termina à frente" }
-  : { likely: " deve vencer", decided: " está eleito", chance: "de chance de vitória", call: "apontar um vencedor" };
+  : { likely: " deve vencer", decided: " está eleito", chance: "de chance de vitória", call: "apontar um vencedor" });
 const BRT = { timeZone: "America/Sao_Paulo" }; // horários sempre em Brasília, onde quer que o leitor esteja
 const LIVE_REFRESH = 15000; // ms entre leituras de latest.json
 const FULL_REFRESH = 5 * 60000; // ms entre leituras do histórico completo
@@ -88,34 +108,54 @@ function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.
 
 let N = 0, view = null, ufNames = [], ufSort = { key: "uf", dir: 1 };
 
-/* ---------- Motor (DEV) ---------- */
-const worker = DEV ? new Worker(new URL("./worker.js", import.meta.url), { type: "module" }) : null;
-let reqId = 0, pending = false, queued = false;
+/* ---------- Demonstração (motor no navegador) ---------- */
+let worker = null, reqId = 0, pending = false, queued = false;
 function request() {
+  if (!worker) return;
   if (pending) { queued = true; return; }
   pending = true;
   worker.postMessage({ id: ++reqId, kind: "live", dataset: "data-demo/", proj: PROJ, fraction: progress(), points: 300 });
 }
-if (DEV) worker.onmessage = ({ data }) => {
-  if (data.type === "meta") { N = data.N; ufNames = data.ufNames; return; }
-  pending = false;
-  if (data.type === "error") { showError("Falha na projeção: " + data.message); return; }
-  view = { curve: data.curve, snap: data.snap, ufs: data.snap.ufs.map((u, i) => ({ ...u, uf: ufNames[i], counted: u.sections })), updated: null };
-  render();
-  if (queued) { queued = false; request(); }
-};
-if (DEV) worker.onerror = (e) => showError("Não foi possível iniciar o motor: " + (e.message || "erro no worker") + ". Sirva a pasta app por HTTP.");
-function showError(msg) { const u = $("updated"); u.textContent = ""; u.append(el("span", "err", msg)); }
-
-/* ---------- Barra de progresso (DEV) ---------- */
-function progress() { return Math.max(0.001, +$("progress").value / 1000); }
-if (DEV) {
-  $("dev").hidden = false;
-  const show = () => { $("progress-o").textContent = `${pct(progress())} das seções`; };
-  show();
-  $("progress").addEventListener("input", () => { show(); request(); });
+function startDemo() {
+  if (worker) return;
+  demoOn = true;
+  document.body.classList.add("demo-on");
+  worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+  worker.onmessage = ({ data }) => {
+    if (!demoOn) return;
+    if (data.type === "meta") { N = data.N; ufNames = data.ufNames; return; }
+    pending = false;
+    if (data.type === "error") { showError("Falha na projeção: " + data.message); return; }
+    view = { curve: data.curve, snap: data.snap, ufs: data.snap.ufs.map((u, i) => ({ ...u, uf: ufNames[i], counted: u.sections })), updated: null };
+    render();
+    if (queued) { queued = false; request(); }
+  };
+  worker.onerror = (e) => showError("Não foi possível iniciar o motor: " + (e.message || "erro no worker") + ". Sirva a pasta app por HTTP.");
+  const bar = $("dev");
+  bar.hidden = false;
+  if (!DEV) { // na página ao vivo, o controle fica dentro da seção da demonstração
+    bar.classList.add("inline");
+    bar.querySelector("b").textContent = "Demonstração";
+    $("demo-slot").append(bar);
+    $("demo-intro").hidden = false;
+  }
+  showProgress();
   request();
 }
+// Quando a apuração real começa, a demonstração sai da página ao vivo
+function stopDemo() {
+  if (!worker || DEV) return;
+  worker.terminate();
+  worker = null; demoOn = false; pending = queued = false; view = null;
+  document.body.classList.remove("demo-on", "waiting");
+  $("dev").hidden = true; $("demo-intro").hidden = true; $("waitcard").hidden = true;
+}
+function showError(msg) { const u = $("updated"); u.textContent = ""; u.append(el("span", "err", msg)); }
+
+function progress() { return Math.max(0.001, +$("progress").value / 1000); }
+function showProgress() { $("progress-o").textContent = `${pct(progress())} das seções`; }
+$("progress").addEventListener("input", () => { showProgress(); request(); });
+if (DEV) startDemo();
 
 /* ---------- Dados ao vivo (gravados pelo coletor) ---------- */
 // Endereço dos arquivos do coletor: <meta name="sibila-live" content="https://..."> no HTML,
@@ -139,6 +179,7 @@ async function loadLive() {
     liveStatus = status;
     const p = latest?.point;
     if (!p) { renderWaiting(status); return; }
+    if (demoOn) { stopDemo(); return loadLive(); } // apuração começou: sai a demonstração
     let curve = view?.curve ?? [];
     if (full && history) {
       curve = (history.sections ?? []).map((sec, i) => ({ sections: sec, time: history.t[i], raw: history.raw[i], done: history.done[i] }));
@@ -163,10 +204,11 @@ let liveStatus = null;
 // Antes da apuração: manchete de espera e, no cabeçalho, se o TSE está respondendo
 function renderWaiting(status) {
   document.body.classList.add("waiting");
-  $("headline").textContent = "Aguardando o 2º turno";
-  countdownDay = status?.dia ?? ELECTION;
+  $("waitcard").hidden = false;
+  countdownDay = status?.dia ?? LIVE_DAY;
   tickCountdown();
   setTseIndicator(status);
+  startDemo();
 }
 
 // Contagem regressiva até as 17h (horário de Brasília, UTC-3) do dia da eleição
@@ -182,9 +224,9 @@ function tickCountdown() {
   box.hidden = false;
   if (left <= 0) {
     box.hidden = true;
-    $("subline").textContent = "A apuração começou. Aguardando os primeiros resultados; esta página se atualiza sozinha.";
+    $("wait-sub").textContent = "A apuração começou. Aguardando os primeiros resultados; esta página se atualiza sozinha.";
   } else {
-    $("subline").textContent = `A apuração começa às 17h de ${countdownDay}, horário de Brasília.`;
+    $("wait-sub").textContent = `A apuração começa às 17h de ${countdownDay}, horário de Brasília.`;
     const parts = [[Math.floor(left / 86400000), "dia", "dias"], [Math.floor(left / 3600000) % 24, "hora", "horas"], [Math.floor(left / 60000) % 60, "minuto", "minutos"], [Math.floor(left / 1000) % 60, "segundo", "segundos"]];
     box.textContent = "";
     for (const [n, one, many] of parts) {
@@ -211,19 +253,25 @@ if (!DEV) { loadLive(); setInterval(loadLive, LIVE_REFRESH); }
 function render() {
   const { snap, curve } = view;
   const st = callStatus(snap, CERTAINTY);
-  $("live").classList.toggle("on", !DEV && snap.sections < 1);
-  const age = DEV ? 0 : Date.now() - new Date(view.updated).getTime();
-  const stale = !DEV && snap.sections < 1 && age > STALE_AFTER;
-  $("live").classList.toggle("stale", stale);
-  $("updated").textContent = DEV ? `Reprodução de ${ELECTION}`
-    : stale ? `Sem atualização há ${Math.round(age / 60000)} min (última às ${new Date(view.updated).toLocaleTimeString("pt-BR", BRT)})`
-    : `Atualizado às ${new Date(view.updated).toLocaleTimeString("pt-BR", BRT)}`;
-  document.body.classList.remove("waiting");
-  if (!DEV && liveStatus?.tse && !liveStatus.tse.ok && !stale) setTseIndicator(liveStatus);
+  if (DEV) {
+    $("updated").textContent = `Reprodução de ${DEMO_DAY}`;
+  } else if (demoOn) {
+    setTseIndicator(liveStatus); // demonstração na espera: o cabeçalho continua falando do TSE
+  } else {
+    $("live").classList.toggle("on", snap.sections < 1);
+    const age = Date.now() - new Date(view.updated).getTime();
+    const stale = snap.sections < 1 && age > STALE_AFTER;
+    $("live").classList.toggle("stale", stale);
+    $("updated").textContent = stale ? `Sem atualização há ${Math.round(age / 60000)} min (última às ${new Date(view.updated).toLocaleTimeString("pt-BR", BRT)})`
+      : `Atualizado às ${new Date(view.updated).toLocaleTimeString("pt-BR", BRT)}`;
+    document.body.classList.remove("waiting");
+    if (liveStatus?.tse && !liveStatus.tse.ok && !stale) setTseIndicator(liveStatus);
+  }
   renderHero(snap, st);
   renderChart(snap, curve);
   renderStates(view.ufs);
-  $("note").textContent = DEV
+  renderMap(view.ufs);
+  $("note").textContent = demoOn
     ? `Demonstração: o confronto Lula × Flávio no 1º turno de 2026, na ordem real em que as seções foram apuradas. Cada seção ainda não apurada é estimada pelo seu resultado no 2º turno de 2022 (Lula × Bolsonaro) somado à variação média, de 2022 para 2026, das seções já apuradas da área mais próxima com dados suficientes (local de votação, zona, município ou estado). Apontamos quem deve terminar à frente quando a projeção dá ${pct(CERTAINTY)} de chance a um candidato. A margem de erro é a do intervalo de confiança de ${conf}%.`
     : `Como lemos a apuração: cada seção ainda não apurada é estimada pelo seu resultado no 1º turno somado à variação entre turnos das seções já apuradas da zona, do município ou do estado. Apontamos um vencedor provável quando a projeção dá ${pct(CERTAINTY)} de chance a um candidato. Eleito significa que a vantagem já supera o número de eleitores que ainda faltam apurar. A margem de erro é a do intervalo de confiança de ${conf}%.`;
 }
@@ -253,16 +301,16 @@ function renderHero(snap, st) {
   h1.textContent = "";
   sub.textContent = "";
   if (st.stage === "decided") {
-    h1.append(nameEl(), document.createTextNode(COPY.decided), el("span", "confirma", "Confirmado"));
+    h1.append(nameEl(), document.createTextNode(copy().decided), el("span", "confirma", "Confirmado"));
     sub.append(el("strong", "proj-line", projText), el("span", null, `A vantagem de ${num(Math.abs(snap.lulaVotes - snap.bolsoVotes))} votos já supera os ${num(snap.aptosLeft)} eleitores que ainda faltam apurar.`));
   } else if (st.stage === "likely") {
-    h1.append(nameEl(), document.createTextNode(COPY.likely));
-    sub.append(el("strong", "proj-line", projText), el("span", null, `${chance(lv.pWin)} ${COPY.chance}.`));
+    h1.append(nameEl(), document.createTextNode(copy().likely));
+    sub.append(el("strong", "proj-line", projText), el("span", null, `${chance(lv.pWin)} ${copy().chance}.`));
   } else {
     h1.textContent = "Disputa indefinida";
     const line = el("strong", "proj-line");
     line.append(nameEl(), document.createTextNode(`: ${projText}`));
-    sub.append(line, el("span", null, `${chance(lv.pWin)} de chance. Para ${COPY.call}, exigimos ${pct(CERTAINTY)}.`));
+    sub.append(line, el("span", null, `${chance(lv.pWin)} de chance. Para ${copy().call}, exigimos ${pct(CERTAINTY)}.`));
   }
 
   // Duelo: os números grandes são a apuração
@@ -437,7 +485,7 @@ function renderStates(ufs) {
   rows.sort((a, b) => (k === "uf" ? a.uf.localeCompare(b.uf) : (a[k] || 0) - (b[k] || 0)) * ufSort.dir);
   // Sim, a gente sabe: isto é a meia-largura do intervalo de confiança de 95%, não uma "margem
   // de erro" de pesquisa. O povo entende "margem de erro". Licença poética, e foda-se.
-  const cols = [["uf", "Estado"], ["counted", "Seções apuradas"], ["raw", "Votos apurados"], ["share", "Projeção"], ["ci", "Margem de erro"], ["lead", "Lidera a projeção"]];
+  const cols = [["uf", "Estado"], ["counted", "Seções apuradas"], ["raw", "Votos apurados"], ["share", "Projeção"], ["ci", "Margem de erro"]];
   const t = $("ufs"); t.textContent = "";
   const head = t.createTHead().insertRow();
   for (const [key, label] of cols) {
@@ -456,13 +504,65 @@ function renderStates(ufs) {
     tr.insertCell().append(splitBar(r.raw, A, B));
     tr.insertCell().append(splitBar(r.share, A, B));
     tr.insertCell().textContent = Number.isFinite(r.ci) ? `± ${pp(r.ci, 2)} pp` : "–";
-    const lc = tr.insertCell(); lc.className = "lead";
-    const who = r.lead === 0 ? A : B, dot = el("span", "dot"); dot.style.background = `var(${who.color})`;
-    lc.append(dot, document.createTextNode(Number.isFinite(r.share) ? who.name : "–"));
   }
 }
 
 // Barra dividida: A (vermelho) a partir da esquerda, B (azul) a partir da direita, marca em 50%
+// Mapa por UF: cinza até 10% das seções apuradas; depois, a cor de quem lidera a apuração,
+// do tom mais claro (50%) ao mais forte (70% ou mais)
+const MAP_MIN = 0.1, MAP_LOW = 0.5, MAP_HIGH = 0.7;
+let mapUfs = new Map();
+function mapFill(u) {
+  if (!u || !(u.counted >= MAP_MIN) || !Number.isFinite(u.raw)) return "var(--map-empty)";
+  const lead = u.raw >= 0.5 ? CANDIDATES.lula : CANDIDATES.bolso;
+  const share = Math.max(u.raw, 1 - u.raw);
+  const t = Math.min(1, Math.max(0, (share - MAP_LOW) / (MAP_HIGH - MAP_LOW)));
+  return `color-mix(in srgb, var(${lead.color}) ${Math.round(15 + 85 * t)}%, #ffffff)`;
+}
+function buildMap() {
+  const box = $("map-svg");
+  if (box.firstChild) return;
+  let s = `<svg viewBox="0 0 ${BR_MAP.width} ${BR_MAP.height}" role="img" aria-label="Mapa do Brasil por estado">`;
+  for (const [uf, d] of Object.entries(BR_MAP.paths)) s += `<path data-uf="${uf}" d="${d}"><title>${BR_MAP.names[uf]}</title></path>`;
+  box.innerHTML = s + "</svg>";
+  const tip = el("div", "tip"); tip.hidden = true; box.append(tip);
+  const svg = box.querySelector("svg");
+  svg.addEventListener("pointermove", (e) => {
+    const uf = e.target.closest?.("path")?.dataset.uf;
+    if (!uf) { tip.hidden = true; return; }
+    const u = mapUfs.get(uf), A = CANDIDATES.lula, B = CANDIDATES.bolso;
+    tip.textContent = "";
+    tip.append(el("div", "t", `${BR_MAP.names[uf]} · ${u ? pct(u.counted, 0) : "0%"} das seções apuradas`));
+    for (const [c, raw, proj] of [[A, u?.raw, u?.share], [B, 1 - u?.raw, 1 - u?.share]]) {
+      const row = el("div", "r"); const i = el("i"); i.style.borderTopColor = `var(${c.color})`;
+      row.append(i, el("b", null, Number.isFinite(raw) ? pct(raw) : "–"), el("span", null, `${c.name}${Number.isFinite(proj) ? ` · projeção ${pct(proj)}` : ""}`));
+      tip.append(row);
+    }
+    tip.hidden = false;
+    const r = box.getBoundingClientRect();
+    const left = e.clientX - r.left + 14;
+    tip.style.left = (left + tip.offsetWidth > r.width ? e.clientX - r.left - tip.offsetWidth - 14 : left) + "px";
+    tip.style.top = Math.max(0, e.clientY - r.top - 20) + "px";
+  });
+  svg.addEventListener("pointerleave", () => { tip.hidden = true; });
+  // Legenda: as duas escalas e o cinza
+  const leg = $("map-legend"); leg.textContent = "";
+  for (const c of [CANDIDATES.lula, CANDIDATES.bolso]) {
+    const row = el("div", "scale");
+    const bar = el("span", "ramp"); bar.style.background = `linear-gradient(90deg, color-mix(in srgb, var(${c.color}) 15%, #fff), var(${c.color}))`;
+    row.append(el("span", "who", c.name), el("span", "lo", "50%"), bar, el("span", "hi", "70%+"));
+    leg.append(row);
+  }
+  const g = el("div", "scale"); const sw = el("span", "swatch");
+  g.append(sw, document.createTextNode("Menos de 10% das seções apuradas. O exterior aparece só na tabela."));
+  leg.append(g);
+}
+function renderMap(ufs) {
+  buildMap();
+  mapUfs = new Map(ufs.map((u) => [u.uf, u]));
+  for (const p of $("map-svg").querySelectorAll("path")) p.style.fill = mapFill(mapUfs.get(p.dataset.uf));
+}
+
 function splitBar(a, A, B) {
   if (!Number.isFinite(a)) return document.createTextNode("–");
   const wrap = el("span", "split");

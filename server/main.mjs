@@ -39,10 +39,12 @@ const TYPES = {
   ".png": "image/png", ".webp": "image/webp", ".svg": "image/svg+xml",
 };
 const COMPRESS = new Set([".html", ".js", ".css", ".json", ".bin", ".svg"]);
+// Código e dados sempre revalidam (304 se não mudaram): depois de um deploy o navegador nunca
+// mistura arquivos de versões diferentes. O CDN é limpo a cada deploy (purge-on-deploy).
 const CACHE = {
-  ".html": "no-cache", // sempre revalida (304 se não mudou)
-  ".js": "public, max-age=300", ".css": "public, max-age=300",
-  ".json": "public, max-age=3600", ".bin": "public, max-age=3600",
+  ".html": "no-cache",
+  ".js": "no-cache", ".css": "no-cache",
+  ".json": "no-cache", ".bin": "no-cache",
   ".jpg": "public, max-age=86400", ".png": "public, max-age=86400", ".webp": "public, max-age=86400",
 };
 const LIVE_CACHE = "public, max-age=5, stale-while-revalidate=10";
