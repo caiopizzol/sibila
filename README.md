@@ -9,7 +9,7 @@ A apuração parcial é uma amostra viesada: regiões menos desenvolvidas demora
 ## Links
 
 - **Ao vivo:** https://sibila-production.up.railway.app — acompanhamento do 2º turno de 25/10/2026. Antes da apuração, mostra a espera e se a API do TSE está respondendo.
-- **Demonstração:** https://sibila-production.up.railway.app/demo/ — reproduz o 2º turno de 2022 na ordem real de apuração, com um controle que define até onde a apuração chegou.
+- **Demonstração:** https://sibila-production.up.railway.app/demo/ — reproduz o confronto Lula × Flávio no 1º turno de 2026 na ordem real de apuração, com um controle que define até onde a apuração chegou.
 - **Backtest:** https://sibila-production.up.railway.app/backtest.html — o backtest de 2022 com todos os parâmetros ajustáveis.
 - **Base do 1º turno de 2026:** [release `base-2026-1t`](https://github.com/carlos-schwabe/sibila/releases/tag/base-2026-1t) — resultado por seção lido dos boletins de urna (`sections.bin` e `meta.json`).
 
@@ -53,6 +53,17 @@ Reprodução do 2º turno de 30/10/2022 na ordem real em que as seções entrara
 - Projetar direto o % de votos da área, sem o 1º turno (`estimator: "share"`), é bem pior: cobertura de 70% e primeira definição só com 76,9% apurado.
 
 `node scripts/backtest.mjs` reproduz a tabela (aceita um JSON com parâmetros, por exemplo `'{"estimator":"share"}'`).
+
+## Teste fora da amostra: 1º turno de 2026
+
+O confronto Lula × Flávio no 1º turno de 2026 (Lula com 48,99% dos votos dos dois), projetado a partir do resultado de cada seção em 2022, na ordem real de apuração de 2026 e com os dados abertos do TSE. 92,4% das seções de 2026 existiam em 2022; as novas recebem a média da zona. É a base da demonstração (`node scripts/test_2026_1t.mjs`, depois `node scripts/backtest.mjs '{"data":"data/test-2026-1t-2t"}'`).
+
+| Base de 2022 | Erro com 25% / 50% / 75% apurado | Cobertura do intervalo de 95% | Primeira definição |
+|---|---|---|---|
+| **Lula × Bolsonaro no 2º turno** | +0,25 / +0,19 / +0,07 pp | 99% | Flávio, 37% apurado (18h33) |
+| Lula / todos os votos no 1º turno | +0,22 / +0,25 / +0,11 pp | 95% | Flávio, 48% apurado (18h44) |
+
+Com quatro anos de distância entre a base e o alvo, o erro ficou perto de 0,2 pp e nenhuma definição foi errada.
 
 ## Noite da eleição
 
@@ -166,6 +177,7 @@ app/                 página (estática)
   worker.js          roda o motor fora da thread principal na demonstração e no backtest
   backtest.html      backtest interativo de 2022
   data/              base de 2022 por seção
+  data-demo/         1º turno de 2026 com a base de 2022 (demonstração)
 server/
   main.mjs           servidor de produção: página + coletor
   poller.mjs         coletor da divulgação do TSE

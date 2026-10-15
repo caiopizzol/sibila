@@ -55,17 +55,23 @@ document.body.insertAdjacentHTML("afterbegin", `
 </div>
 `);
 for (const img of document.querySelectorAll("img[data-src]")) img.src = asset(img.dataset.src);
+if (DEV) document.querySelector(".brand span").innerHTML = "<b>1º turno de 2026</b> – Demonstração";
 // "lula" e "bolso" são os candidatos A (13) e B (22) do motor
 const CANDIDATES = DEV ? {
   lula: { name: "Lula", number: "13", party: "PT", color: "--a", photo: asset("img/lula.jpg") },
-  bolso: { name: "Bolsonaro", number: "22", party: "PL", color: "--b", photo: asset("img/flavio-bolsonaro.jpg") },
+  bolso: { name: "Flávio Bolsonaro", number: "22", party: "PL", color: "--b", photo: asset("img/flavio-bolsonaro.jpg") },
 } : {
   lula: { name: "Lula", number: "13", party: "PT", color: "--a", photo: asset("img/lula.jpg") },
   bolso: { name: "Flávio Bolsonaro", number: "22", party: "PL", color: "--b", photo: asset("img/flavio-bolsonaro.jpg") },
 };
 const CERTAINTY = 0.999;
 const PROJ = { ...DEFAULT_PROJ };
-const ELECTION = DEV ? "30/10/2022" : "25/10/2026";
+const ELECTION = DEV ? "04/10/2026" : "25/10/2026";
+// A demonstração reproduz o confronto Lula x Flávio no 1º turno de 2026 (data-demo/), em que
+// ninguém se elege: os textos falam em terminar à frente
+const COPY = DEV
+  ? { likely: " deve terminar à frente", decided: " termina à frente", chance: "de chance de terminar à frente", call: "apontar quem termina à frente" }
+  : { likely: " deve vencer", decided: " está eleito", chance: "de chance de vitória", call: "apontar um vencedor" };
 const BRT = { timeZone: "America/Sao_Paulo" }; // horários sempre em Brasília, onde quer que o leitor esteja
 const LIVE_REFRESH = 15000; // ms entre leituras de latest.json
 const FULL_REFRESH = 5 * 60000; // ms entre leituras do histórico completo
@@ -88,7 +94,7 @@ let reqId = 0, pending = false, queued = false;
 function request() {
   if (pending) { queued = true; return; }
   pending = true;
-  worker.postMessage({ id: ++reqId, kind: "live", proj: PROJ, fraction: progress(), points: 300 });
+  worker.postMessage({ id: ++reqId, kind: "live", dataset: "data-demo/", proj: PROJ, fraction: progress(), points: 300 });
 }
 if (DEV) worker.onmessage = ({ data }) => {
   if (data.type === "meta") { N = data.N; ufNames = data.ufNames; return; }
@@ -217,7 +223,9 @@ function render() {
   renderHero(snap, st);
   renderChart(snap, curve);
   renderStates(view.ufs);
-  $("note").textContent = `Como lemos a apuração: cada seção ainda não apurada é estimada pelo seu resultado no 1º turno somado à variação entre turnos das seções já apuradas ${DEV ? "da área mais próxima com dados suficientes (local de votação, zona, município ou estado)" : "da zona, do município ou do estado"}. Apontamos um vencedor provável quando a projeção dá ${pct(CERTAINTY)} de chance a um candidato. Eleito significa que a vantagem já supera o número de eleitores que ainda faltam apurar. A margem de erro é a do intervalo de confiança de ${conf}%.`;
+  $("note").textContent = DEV
+    ? `Demonstração: o confronto Lula × Flávio no 1º turno de 2026, na ordem real em que as seções foram apuradas. Cada seção ainda não apurada é estimada pelo seu resultado no 2º turno de 2022 (Lula × Bolsonaro) somado à variação média, de 2022 para 2026, das seções já apuradas da área mais próxima com dados suficientes (local de votação, zona, município ou estado). Apontamos quem deve terminar à frente quando a projeção dá ${pct(CERTAINTY)} de chance a um candidato. A margem de erro é a do intervalo de confiança de ${conf}%.`
+    : `Como lemos a apuração: cada seção ainda não apurada é estimada pelo seu resultado no 1º turno somado à variação entre turnos das seções já apuradas da zona, do município ou do estado. Apontamos um vencedor provável quando a projeção dá ${pct(CERTAINTY)} de chance a um candidato. Eleito significa que a vantagem já supera o número de eleitores que ainda faltam apurar. A margem de erro é a do intervalo de confiança de ${conf}%.`;
 }
 
 // Visão de um instante por candidato (% dos votos válidos)
@@ -245,16 +253,16 @@ function renderHero(snap, st) {
   h1.textContent = "";
   sub.textContent = "";
   if (st.stage === "decided") {
-    h1.append(nameEl(), document.createTextNode(" está eleito"), el("span", "confirma", "Confirmado"));
+    h1.append(nameEl(), document.createTextNode(COPY.decided), el("span", "confirma", "Confirmado"));
     sub.append(el("strong", "proj-line", projText), el("span", null, `A vantagem de ${num(Math.abs(snap.lulaVotes - snap.bolsoVotes))} votos já supera os ${num(snap.aptosLeft)} eleitores que ainda faltam apurar.`));
   } else if (st.stage === "likely") {
-    h1.append(nameEl(), document.createTextNode(" deve vencer"));
-    sub.append(el("strong", "proj-line", projText), el("span", null, `${chance(lv.pWin)} de chance de vitória.`));
+    h1.append(nameEl(), document.createTextNode(COPY.likely));
+    sub.append(el("strong", "proj-line", projText), el("span", null, `${chance(lv.pWin)} ${COPY.chance}.`));
   } else {
     h1.textContent = "Disputa indefinida";
     const line = el("strong", "proj-line");
     line.append(nameEl(), document.createTextNode(`: ${projText}`));
-    sub.append(line, el("span", null, `${chance(lv.pWin)} de chance. Para apontar um vencedor, exigimos ${pct(CERTAINTY)}.`));
+    sub.append(line, el("span", null, `${chance(lv.pWin)} de chance. Para ${COPY.call}, exigimos ${pct(CERTAINTY)}.`));
   }
 
   // Duelo: os números grandes são a apuração
