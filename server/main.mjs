@@ -15,6 +15,9 @@
 //   LIVE_DIR        onde gravar o estado do coletor (no Railway, dentro do volume)
 //   ZONAS, RPS, INTERVALO  parâmetros do coletor (100, 30, 10)
 //   TSE_BASE        endereço da divulgação (https://resultados.tse.jus.br/oficial)
+//
+// Leitores online: cada aba aberta e visível manda POST /ping?id=<aleatório> a cada minuto (id
+// gerado no navegador, sem cookie nem dado pessoal). Online = ids vistos nos últimos 90 s.
 import http from "node:http";
 import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, extname, relative, sep } from "node:path";
@@ -73,6 +76,30 @@ for (const name of ["latest.json", "history.json"]) {
   if (existsSync(LIVE_DIR + name)) setLive(name, JSON.parse(readFileSync(LIVE_DIR + name, "utf8")));
 }
 
+/* ---------- Leitores online ---------- */
+const ONLINE_WINDOW = 90000; // ms sem ping até a aba deixar de contar
+const MAX_IDS = 2_000_000;   // teto de memória contra abuso
+const seen = new Map();      // id -> último ping (ms)
+const VISITS_FILE = LIVE_DIR + "visitas.json";
+const visits = { online: 0, peak: 0, peakAt: null, sessions: 0 };
+try { Object.assign(visits, JSON.parse(readFileSync(VISITS_FILE, "utf8")), { online: 0 }); } catch {}
+function ping(id) {
+  if (!seen.has(id)) { if (seen.size >= MAX_IDS) return; visits.sessions++; }
+  seen.set(id, Date.now());
+  if (seen.size > visits.online) countOnline();
+}
+function countOnline() {
+  const cut = Date.now() - ONLINE_WINDOW;
+  let n = 0;
+  for (const [id, t] of seen) { if (t < cut) seen.delete(id); else n++; }
+  visits.online = n;
+  if (n > visits.peak) { visits.peak = n; visits.peakAt = new Date().toISOString(); }
+}
+setInterval(() => {
+  countOnline();
+  try { mkdirSync(LIVE_DIR, { recursive: true }); writeFileSync(VISITS_FILE, JSON.stringify(visits)); } catch {}
+}, 15000);
+
 /* ---------- HTTP ---------- */
 const status = { started: new Date().toISOString(), pleito: null, eleicao: null, base: null, lastUpdate: null, poller: "aguardando" };
 // Um só cliente do TSE para tudo: mesmo semáforo e uma medição de saúde só
@@ -87,7 +114,15 @@ function tseHealth() {
 http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   let path = decodeURIComponent(url.pathname);
-  if (path === "/healthz") { res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify({ ...status, tse: tseHealth() }, null, 2)); return; }
+  if (path === "/healthz") { res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify({ ...status, leitores: visits, tse: tseHealth() }, null, 2)); return; }
+  if (path === "/ping") {
+    const id = url.searchParams.get("id") ?? "";
+    if (req.method !== "POST" || !/^[a-z0-9]{8,32}$/.test(id)) { res.writeHead(400, { "cache-control": "no-store" }); res.end(); return; }
+    ping(id);
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(JSON.stringify({ online: Math.max(1, visits.online) }));
+    req.resume(); return;
+  }
   if (path === "/demo") { res.writeHead(301, { location: "/demo/" }); res.end(); return; }
   const f = files.get(path);
   if (!f || (req.method !== "GET" && req.method !== "HEAD")) {

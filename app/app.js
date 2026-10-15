@@ -18,7 +18,7 @@ document.body.insertAdjacentHTML("afterbegin", `
 
 <header class="top">
   <div class="brand"><img data-src="img/brasil.webp" alt="Bandeira do Brasil" width="44" height="31"><span><b>2º turno</b> – Acompanhamento e Projeção</span></div>
-  <div class="live" id="live" role="status"><i></i><span id="updated">Carregando…</span></div>
+  <div class="status-bar"><span class="online" id="online" hidden></span><div class="live" id="live" role="status"><i></i><span id="updated">Carregando…</span></div></div>
 </header>
 
 <div class="wrap">
@@ -244,6 +244,30 @@ function setTseIndicator(status) {
   $("updated").textContent = status.tse.ok ? "TSE respondendo" : `TSE sem resposta${since}`;
 }
 if (!DEV) { loadLive(); setInterval(loadLive, LIVE_REFRESH); }
+// Leitores online: a aba visível avisa o servidor a cada minuto (server/main.mjs, /ping) e recebe
+// de volta quantas abas estão abertas agora. Sem o servidor (pasta servida estática), some.
+const PING_EVERY = 60000;
+let sessionId = null;
+try { sessionId = sessionStorage.getItem("sibila-id"); } catch {}
+if (!sessionId) {
+  sessionId = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => (b % 36).toString(36)).join("");
+  try { sessionStorage.setItem("sibila-id", sessionId); } catch {}
+}
+async function sendPing() {
+  if (document.hidden) return;
+  try {
+    const r = await fetch(new URL(`/ping?id=${sessionId}`, location.href), { method: "POST", cache: "no-store" });
+    if (!r.ok) throw new Error();
+    const { online } = await r.json();
+    const box = $("online");
+    box.textContent = `${num(online)} ${online === 1 ? "pessoa acompanhando" : "pessoas acompanhando"}`;
+    box.hidden = false;
+  } catch { $("online").hidden = true; }
+}
+sendPing();
+setInterval(sendPing, PING_EVERY);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) sendPing(); });
+
 // O gráfico é desenhado na largura da coluna: redesenha quando o layout muda de tamanho
 let resizeTimer = null;
 addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => view && render(), 150); });
