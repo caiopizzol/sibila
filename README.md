@@ -30,7 +30,7 @@ cd app && python3 -m http.server   # só a página, lendo o que estiver em app/l
 
 **Intervalo.** A variância soma o ruído entre seções, o erro amostral da média da área usada e a variância entre áreas de cada nível que a projeção pula (um município projetado pelo seu estado carrega a variação entre municípios do estado, e assim por diante). Os desvios de um nível são estimados nos dados apurados, descontado o ruído amostral. Como a ordem de apuração não é aleatória, metade da variância dos níveis pulados é tratada como um viés comum a tudo o que foi projetado a partir da mesma área (`biasCorr = 0.5`). O intervalo usa a aproximação normal.
 
-**Situação da disputa.** *Indefinida* enquanto nenhum candidato tiver 99,9% de probabilidade de vitória pela projeção; *provável vencedor* a partir daí; *eleito* quando a vantagem em votos supera o número de eleitores aptos que ainda faltam apurar, o que não depende do modelo.
+**Situação da disputa.** *Indefinida* enquanto o intervalo de confiança de 95% cruzar 50%; *provável vencedor* quando o intervalo inteiro fica de um lado de 50%, com pelo menos 5% das seções apuradas (nos primeiros minutos o intervalo ainda subestima a incerteza); *eleito* quando a vantagem em votos supera o número de eleitores aptos que ainda faltam apurar, o que não depende do modelo.
 
 **"Margem de erro".** Na tabela por estado, a meia-largura do intervalo de 95% aparece como "margem de erro". Sabemos que não é a margem de erro de uma pesquisa; é licença poética, porque é o termo que todo mundo entende.
 
@@ -48,9 +48,9 @@ Reprodução do 2º turno de 30/10/2022 na ordem real em que as seções entrara
 | 90% | 19:10 | 50,53% | 50,92% ± 0,02 | +0,01 pp |
 
 - O intervalo de 95% conteve o resultado final em **100%** dos 1.000 instantes avaliados.
-- **Primeira definição (99,9%): Lula com 19,4% apurado, às 17:48.** A apuração só virou de vez para Lula com 67,6% (18:43). Em nenhum instante a projeção apontou o vencedor errado.
+- **Primeira definição (intervalo de 95% inteiro acima de 50%): Lula com 16,5% apurado, às 17:43.** A apuração só virou de vez para Lula com 67,6% (18:43). Em nenhum instante a projeção apontou o vencedor errado.
 - Matematicamente definido com 98,8% apurado, às 19:56.
-- Projetar direto o % de votos da área, sem o 1º turno (`estimator: "share"`), é bem pior: cobertura de 70% e primeira definição só com 76,9% apurado.
+- Projetar direto o % de votos da área, sem o 1º turno (`estimator: "share"`), é bem pior: cobertura de 70%.
 
 `node scripts/backtest.mjs` reproduz a tabela (aceita um JSON com parâmetros, por exemplo `'{"estimator":"share"}'`).
 
@@ -60,8 +60,8 @@ O confronto Lula × Flávio no 1º turno de 2026 (Lula com 48,99% dos votos dos 
 
 | Base de 2022 | Erro com 25% / 50% / 75% apurado | Cobertura do intervalo de 95% | Primeira definição |
 |---|---|---|---|
-| **Lula × Bolsonaro no 2º turno** | +0,25 / +0,19 / +0,07 pp | 99% | Flávio, 37% apurado (18h33) |
-| Lula / todos os votos no 1º turno | +0,22 / +0,25 / +0,11 pp | 95% | Flávio, 48% apurado (18h44) |
+| **Lula × Bolsonaro no 2º turno** | +0,25 / +0,19 / +0,07 pp | 99% | Flávio, 21% apurado (18h15) |
+| Lula / todos os votos no 1º turno | +0,22 / +0,25 / +0,11 pp | 95% | Flávio, 35% apurado (18h30) |
 
 Com quatro anos de distância entre a base e o alvo, o erro ficou perto de 0,2 pp e nenhuma definição foi errada.
 
@@ -80,10 +80,10 @@ Simulação do coletor na noite de 2022 (`node scripts/backtest_feed.mjs`); em t
 
 | Votos baixados | Requisições/s (média) | Primeira definição | Intervalo com 50% apurado |
 |---|---|---|---|
-| Só UF (`ZONAS=0`) | 5,6 | 35,4% apurado, 18:10 | ± 0,44 pp |
-| Híbrido, 10 zonas por ciclo | 6,2 | 20,8% apurado, 17:50 | ± 0,25 pp |
-| **Híbrido, 100 zonas por ciclo (padrão)** | 8,7 | 20,8% apurado, 17:50 | ± 0,19 pp |
-| Todas as zonas que mudaram | 9,7 | 20,8% apurado, 17:50 | ± 0,19 pp |
+| Só UF (`ZONAS=0`) | 5,6 | 16,7% apurado, 17:44 | ± 0,44 pp |
+| Híbrido, 10 zonas por ciclo | 6,2 | 16,7% apurado, 17:44 | ± 0,25 pp |
+| **Híbrido, 100 zonas por ciclo (padrão)** | 8,7 | 16,7% apurado, 17:44 | ± 0,19 pp |
+| Todas as zonas que mudaram | 9,7 | 16,7% apurado, 17:44 | ± 0,19 pp |
 
 Para testar de ponta a ponta, `server/replay-server.mjs` reproduz 2022 no formato da divulgação de 2026, num relógio acelerado e com o mesmo limite de requisições do TSE:
 

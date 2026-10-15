@@ -83,7 +83,6 @@ const CANDIDATES = DEV ? {
   lula: { name: "Lula", number: "13", party: "PT", color: "--a", photo: asset("img/lula.jpg") },
   bolso: { name: "Flávio Bolsonaro", number: "22", party: "PL", color: "--b", photo: asset("img/flavio-bolsonaro.jpg") },
 };
-const CERTAINTY = 0.999;
 const PROJ = { ...DEFAULT_PROJ };
 const LIVE_DAY = "25/10/2026", DEMO_DAY = "04/10/2026";
 // A demonstração reproduz o confronto Lula x Flávio no 1º turno de 2026 (data-demo/), em que
@@ -252,7 +251,7 @@ if (!DEV) { loadLive(); setInterval(loadLive, LIVE_REFRESH); }
 /* ---------- Renderização ---------- */
 function render() {
   const { snap, curve } = view;
-  const st = callStatus(snap, CERTAINTY);
+  const st = callStatus(snap);
   if (DEV) {
     $("updated").textContent = `Reprodução de ${DEMO_DAY}`;
   } else if (demoOn) {
@@ -272,8 +271,8 @@ function render() {
   renderStates(view.ufs);
   renderMap(view.ufs);
   $("note").textContent = demoOn
-    ? `Demonstração: o confronto Lula × Flávio no 1º turno de 2026, na ordem real em que as seções foram apuradas. Cada seção ainda não apurada é estimada pelo seu resultado no 2º turno de 2022 (Lula × Bolsonaro) somado à variação média, de 2022 para 2026, das seções já apuradas da área mais próxima com dados suficientes (local de votação, zona, município ou estado). Apontamos quem deve terminar à frente quando a projeção dá ${pct(CERTAINTY)} de chance a um candidato. A margem de erro é a do intervalo de confiança de ${conf}%.`
-    : `Como lemos a apuração: cada seção ainda não apurada é estimada pelo seu resultado no 1º turno somado à variação entre turnos das seções já apuradas da zona, do município ou do estado. Apontamos um vencedor provável quando a projeção dá ${pct(CERTAINTY)} de chance a um candidato. Eleito significa que a vantagem já supera o número de eleitores que ainda faltam apurar. A margem de erro é a do intervalo de confiança de ${conf}%.`;
+    ? `Demonstração: o confronto Lula × Flávio no 1º turno de 2026, na ordem real em que as seções foram apuradas. Cada seção ainda não apurada é estimada pelo seu resultado no 2º turno de 2022 (Lula × Bolsonaro) somado à variação média, de 2022 para 2026, das seções já apuradas da área mais próxima com dados suficientes (local de votação, zona, município ou estado). Apontamos quem deve terminar à frente quando todo o intervalo de confiança de ${conf}% fica de um lado de 50%, com pelo menos 5% das seções apuradas. A margem de erro é a do intervalo de confiança de ${conf}%.`
+    : `Como lemos a apuração: cada seção ainda não apurada é estimada pelo seu resultado no 1º turno somado à variação entre turnos das seções já apuradas da zona, do município ou do estado. Apontamos um vencedor provável quando todo o intervalo de confiança de ${conf}% fica de um lado de 50%, com pelo menos 5% das seções apuradas. Eleito significa que a vantagem já supera o número de eleitores que ainda faltam apurar. A margem de erro é a do intervalo de confiança de ${conf}%.`;
 }
 
 // Visão de um instante por candidato (% dos votos válidos)
@@ -310,7 +309,7 @@ function renderHero(snap, st) {
     h1.textContent = "Disputa indefinida";
     const line = el("strong", "proj-line");
     line.append(nameEl(), document.createTextNode(`: ${projText}`));
-    sub.append(line, el("span", null, `${chance(lv.pWin)} de chance. Para ${copy().call}, exigimos ${pct(CERTAINTY)}.`));
+    sub.append(line, el("span", null, `${chance(lv.pWin)} de chance. Para ${copy().call}, o intervalo de ${conf}% precisa ficar inteiro de um lado de 50%.`));
   }
 
   // Duelo: os números grandes são a apuração

@@ -111,14 +111,17 @@ export function rawCurve(D, sim, targets) {
 
 // Situação da disputa em um instante:
 //  "decided": a vantagem do líder supera todos os eleitores aptos ainda não apurados
-//  "likely":  a projeção dá a um candidato pelo menos `certainty` de chance de vencer
+//  "likely":  o intervalo de confiança inteiro está de um lado de 50%, com pelo menos
+//             MIN_CALL das seções apuradas (nos primeiros minutos o intervalo ainda subestima
+//             a incerteza)
 //  "open":    caso contrário
-export function callStatus(snap, certainty = 0.999) {
+export const MIN_CALL = 0.05;
+export function callStatus(snap) {
   const lead = snap.lulaVotes - snap.bolsoVotes;
   if (Math.abs(lead) > snap.aptosLeft) return { stage: "decided", winner: lead > 0 ? "lula" : "bolso" };
-  if (snap.pWin >= certainty) return { stage: "likely", winner: "lula" };
-  if (1 - snap.pWin >= certainty) return { stage: "likely", winner: "bolso" };
-  return { stage: "open", winner: snap.pWin >= 0.5 ? "lula" : "bolso" };
+  if (snap.sections >= MIN_CALL && snap.lo > 0.5) return { stage: "likely", winner: "lula" };
+  if (snap.sections >= MIN_CALL && snap.hi < 0.5) return { stage: "likely", winner: "bolso" };
+  return { stage: "open", winner: snap.share >= 0.5 ? "lula" : "bolso" };
 }
 
 export function normCdf(x) {

@@ -37,5 +37,5 @@ const likely = first((s) => callStatus(s).stage !== "open");
 const wrong = snaps.filter((s) => callStatus(s).stage !== "open" && callStatus(s).winner !== winner).length;
 const decided = first((s) => callStatus(s).stage === "decided");
 console.log(`\nRaw count favors the winner for good: ${fmt(lead)}`);
-console.log(`First 99.9% call: ${fmt(likely)}${likely ? ` (${callStatus(likely).winner})` : ""}; snapshots calling the wrong winner: ${wrong}`);
+console.log(`First call (CI clear of 50%): ${fmt(likely)}${likely ? ` (${callStatus(likely).winner})` : ""}; snapshots calling the wrong winner: ${wrong}`);
 console.log(`Mathematically decided: ${fmt(decided)}`);
